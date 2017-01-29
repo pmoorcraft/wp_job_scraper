@@ -12,6 +12,12 @@ Version: 1.0
 Author URI: http://instacraft.io
 */
 
+// required libraries for media_sideload_image
+require_once( ABSPATH . 'wp-admin/includes/post.php' );
+require_once( ABSPATH . 'wp-admin/includes/image.php' );
+require_once( ABSPATH . 'wp-admin/includes/file.php' );
+require_once( ABSPATH . 'wp-admin/includes/media.php' );
+
 /*
 * -------------------------------------- OPTIONS PAGE STARTS HERE -----------------------------------------
 */
@@ -23,6 +29,7 @@ Author URI: http://instacraft.io
 add_action( 'admin_menu', 'create_plugin_settings_page');
 add_action( 'admin_init', 'setup_sections' );
 add_action( 'admin_init', 'setup_fields' );
+
 
 
 function create_plugin_settings_page() {
@@ -43,6 +50,7 @@ function create_plugin_settings_page() {
 function plugin_settings_page_content() { ?>
   <div class="wrap">
 		<h2>WP job scraper settings</h2>
+		<?php settings_errors(); ?>
 		<form method="post" action="options.php">
             <?php
                 settings_fields( 'scraper_fields' );
@@ -58,17 +66,21 @@ function plugin_settings_page_content() { ?>
 */
 
 function setup_sections() {
-	add_settings_section( 'location_section', 'Options:', 'section_callback', 'scraper_fields' );
-  add_settings_section( 'frequency_section', 'Scraping frequency', 'section_callback', 'scraper_fields' );
+	add_settings_section( 'query_1', 'Query 1', 'section_callback', 'scraper_fields' );
+  add_settings_section( 'query_2', 'Query 2', 'section_callback', 'scraper_fields' );
+	add_settings_section( 'query_section', 'Query Settings', 'section_callback', 'scraper_fields' );
 }
 
 function section_callback( $arguments ) {
   switch( $arguments['id'] ){
-		case 'location_section':
-			echo 'Location options';
+		case 'query_1':
+			echo ''; //sub-headers go here
+			break;
+		case 'query_2':
+			echo '';
 			break;
 		case 'frequency_section':
-			echo 'Frequency of scraping';
+			echo '';
 			break;
     }
 }
@@ -80,14 +92,14 @@ function setup_fields() {
 
   $fields = array(
 		array(
-			'uid' => 'local_location',
+			'uid' => 'location_1',
 			'label' => 'Location of job scraper 1',
-			'section' => 'location_section',
+			'section' => 'query_1',
 			'type' => 'select',
 			'helper' => 'Choose a country from the list',
-			'supplemental' => 'use reference table',
-			'default' => 'it',
-      'placeholder' => 'use reference table',
+			'supplemental' => '',
+			'default' => 'pt',
+      'placeholder' => '',
       'options' => array(
       			'it' => 'Italy',
       			'pt' => 'Portugal',
@@ -96,22 +108,61 @@ function setup_fields() {
           )
         ),
 
-        array(
-    			'uid' => 'global_location',
-    			'label' => 'Location of job scraper 2',
-    			'section' => 'location_section',
-    			'type' => 'select',
-    			'helper' => 'Choose a country from the list',
-    			'supplemental' => 'use reference table',
-    			'default' => 'it',
-          'placeholder' => 'use reference table',
-          'options' => array(
-          			'it' => 'Italy',
-          			'pt' => 'Portugal',
-          			'uk' => 'UK',
-                'us' => 'US'
-              )
-        )
+      array(
+  			'uid' => 'location_2',
+  			'label' => 'Location of job scraper 2',
+  			'section' => 'query_2',
+  			'type' => 'select',
+  			'helper' => 'Choose a country from the list',
+  			'supplemental' => '',
+  			'default' => 'uk',
+        'placeholder' => '',
+        'options' => array(
+        			'it' => 'Italy',
+        			'pt' => 'Portugal',
+        			'uk' => 'UK',
+              'us' => 'US'
+            )
+      ),
+
+			array(
+  			'uid' => 'query_word_1',
+  			'label' => 'Query 1 words',
+  			'section' => 'query_1',
+  			'type' => 'text',
+  			'helper' => '',
+  			'supplemental' => '',
+  			'default' => '',
+        'placeholder' => '',
+        'options' => false
+      ),
+
+			array(
+  			'uid' => 'query_word_2',
+  			'label' => 'Query 2 words',
+  			'section' => 'query_2',
+  			'type' => 'text',
+  			'helper' => '',
+  			'supplemental' => '',
+  			'default' => 'portuguese',
+        'placeholder' => '',
+        'options' => false
+      ),
+
+			array(  // note: this feature hasn't yet been implemented in the scraper logic
+  			'uid' => 'frequency',
+  			'label' => 'Frequency of queries',
+  			'section' => 'query_section',
+  			'type' => 'select',
+  			'helper' => 'Choose a frequency from the list',
+  			'supplemental' => '',
+  			'default' => 'hourly',
+        'placeholder' => '',
+        'options' => array(
+        			'hourly' => 'Hourly',
+        			'daily' => 'Daily',
+            )
+      ),
 
 	);
 
@@ -169,27 +220,41 @@ function field_callback( $arguments ) {
 
 
 /*
-* On plugin activation, the function below will schedule activate of the create posts function
+* On plugin activation, the hook below will activate the cron_activation function
 */
 
-if( !wp_next_scheduled( 'post_refresh' ) ) {
-   wp_schedule_event( time(), 'daily', 'post_refresh' );
+register_activation_hook( __FILE__, 'cron_activation' );
+register_activation_hook( __FILE__, 'create_first_posts_function' );
+register_activation_hook( __FILE__, 'create_second_posts_function' );
+
+function cron_activation() {
+	if( !wp_next_scheduled( 'hourly_post_refresh' ) ) {
+	   wp_schedule_event( time(), 'hourly', 'hourly_post_refresh' );
+	}
 }
 
-add_action( 'post_refresh', 'create_local_posts_function' );
-
-// register_activation_hook( __FILE__, 'create_local_posts_function' );
-register_activation_hook( __FILE__, 'create_global_posts_function' );
 /*
-* add_action will be used to schedule the below functions: http://wordpress.stackexchange.com/questions/174978/execute-a-function-every-hour-in-the-background
+* Every hour, the hourly_post_refresh hook will be called, which links to the create_local_posts_function, which creates the draft posts.
+*/
+
+add_action( 'hourly_post_refresh', 'create_first_posts_function');
+
+/*
+* source of code http://wordpress.stackexchange.com/questions/174978/execute-a-function-every-hour-in-the-background
 */
 
 
-function create_local_posts_function (){
 
-  $local_location = get_option('local_location');
 
- if( $xml = simplexml_load_file("http://api.indeed.com/ads/apisearch?publisher=4425239534329302&q=%22%22&sort=&radius=&st=&jt=&start=&limit=25&fromage=&filter=&latlong=1&co=" . $local_location . "&chnl=&userip=1.2.3.4&useragent=Mozilla/%2F4.0%28Firefox%29&v=2"))
+
+
+
+function create_first_posts_function (){
+
+  $location_1 = get_option('location_1');
+	$query_word_1 = get_option('query_word_1');
+
+ if( $xml = simplexml_load_file("http://api.indeed.com/ads/apisearch?publisher=4425239534329302&q=" . $query_word_1 . "&sort=&radius=&st=&jt=&start=&limit=25&fromage=&filter=&latlong=1&co=" . $location_1 . "&chnl=&userip=1.2.3.4&useragent=Mozilla/%2F4.0%28Firefox%29&v=2"))
   {
     foreach($xml->results->result as $detail)
     {
@@ -197,9 +262,11 @@ function create_local_posts_function (){
       $job_id = $detail->jobkey;
       $job_name = $detail->jobtitle;
       $job_link = $detail->url;
-      $local_post = array(
+			$job_company = $detail->company;
+			$job_logo_url = "https://logo.clearbit.com/" . $job_company . ".com";
+      $first_post = array(
         'post_title'    => $detail->jobtitle,
-        'post_content'  => $detail->snippet."<a href =$job_link > Apply Now! </a>",
+        'post_content'  => $detail->snippet."</br>"."<a href =$job_link > Apply Now! </a>"."</br>"."<img align=middle src=$job_logo_url />",
         'post_category' => array( $category->term_id ),
         'post_status'   => 'draft',
         'post_author'   => 1,
@@ -209,8 +276,7 @@ function create_local_posts_function (){
 
         }
         else {
-        wp_insert_post( $local_post );
-
+        $post_id_lo = wp_insert_post( $first_post );
         }
       }
      }
@@ -218,10 +284,11 @@ function create_local_posts_function (){
 
 
 
-function create_global_posts_function (){
-  $global_location = get_option('global_location');
+function create_second_posts_function (){
+  $location_2 = get_option('location_2');
+	$query_word_2 = get_option('query_word_2');
 
-  if( $xml = simplexml_load_file("http://api.indeed.com/ads/apisearch?publisher=4425239534329302&q=%22%22&sort=&radius=&st=&jt=&start=&limit=25&fromage=&filter=&latlong=1&co=" . $global_location . "&chnl=&userip=1.2.3.4&useragent=Mozilla/%2F4.0%28Firefox%29&v=2"))
+  if( $xml = simplexml_load_file("http://api.indeed.com/ads/apisearch?publisher=4425239534329302&q=" . $query_word_2 . "&sort=&radius=&st=&jt=&start=&limit=25&fromage=&filter=&latlong=1&co=" . $location_2 . "&chnl=&userip=1.2.3.4&useragent=Mozilla/%2F4.0%28Firefox%29&v=2"))
    {
      foreach($xml->results->result as $detail)
      {
@@ -229,9 +296,12 @@ function create_global_posts_function (){
        $job_id = $detail->jobkey;
        $job_name = $detail->jobtitle;
        $job_link = $detail->url;
-       $global_post = array(
-         'post_title'    => $detail->jobtitle,
-         'post_content'  => $detail->snippet."<a href =$job_link > Apply Now! </a>",
+			 $job_company = $detail->company;
+			 $job_logo_url = "https://logo.clearbit.com/" . $job_company . ".com";
+			 $job_logo_desc = "The logo of" . $job_company . "for the position of" . $job_name;
+       $second_post = array(
+         'post_title'    => $job_company . ": " . $job_name,
+         'post_content'  => $detail->snippet."</br>"."<a href =$job_link > Apply Now! </a>"."</br>"."<img align=middle src=$job_logo_url />",
          'post_category' => array( $category->term_id ),
          'post_status'   => 'draft',
          'post_author'   => 1,
@@ -241,12 +311,18 @@ function create_global_posts_function (){
 
          }
          else {
-         wp_insert_post( $global_post );
-
+         $post_id_gl = wp_insert_post( $second_post );
          }
        }
       }
     }
+
+register_deactivation_hook(__FILE__, 'my_deactivation');
+
+function my_deactivation() {
+	wp_clear_scheduled_hook('hourly_post_refresh');
+}
+
 /*
 * ------------------------------------- END OF SCRAPER LOGIC -------------------------------
 */
